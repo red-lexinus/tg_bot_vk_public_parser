@@ -5,9 +5,9 @@ import requests
 import sqlite3
 import youtube_dl
 
-from aiogram.types import ReplyKeyboardRemove, \
-    ReplyKeyboardMarkup, KeyboardButton, \
-    InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram.types import ReplyKeyboardRemove, ReplyKeyboardMarkup, \
+    KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, \
+    CallbackQuery, MediaGroup, InputFile
 
 import config
 
@@ -174,7 +174,7 @@ def vk_parse_get_posts(group_id, last_pos=1, first_pos=0, check_fixed_post=True)
           f"domain={group_name}&count={last_pos}&access_token={config.vk_token}&v=5.131"
     js_storage = requests.get(req).json()['response']['items'][first_pos::]
     posts = []
-    teg = ['id', 'text', 'attachments', 'copy_history']
+    teg = ['id', 'text', 'attachments', 'copy_history', 'date']
     for i in range(len(js_storage)):
         post = {}
         for el in teg:
@@ -189,25 +189,27 @@ def vk_parse_check_group_id(group_id):
           f"group_id={group_id}&access_token={config.vk_token}&v=5.131"
     group_info = requests.get(req).json()
     if [*group_info.keys()][0] == 'error':
-        return False
+        return
     return True
 
 
 # functions for working with keyboards for tg bot
 
 def create_inline_keyboard_markup(data, lengths_rows):
-    buttons = [InlineKeyboardButton(i[0], callback_data=i[1]) for i in data]
-    keyboard = InlineKeyboardMarkup()
+    buttons = [InlineKeyboardButton(text=i[0], callback_data=i[1]) for i in data]
+    # print(buttons)
+    keyboard = InlineKeyboardMarkup(row_width=2)
     bn_n = 0
-    for count_row in lengths_rows:
-        keyboard.row(*buttons[bn_n: bn_n + count_row])
-        bn_n += count_row
+    for i in lengths_rows:
+        # keyboard.insert(InlineKeyboardButton(f"{i[0]}", callback_data=f"{i[1]}"))
+        keyboard.row(*[t for t in buttons[bn_n: bn_n + i]])
+        bn_n += i
     return keyboard
 
 
 def create_reply_keyboard_markup(data, lengths_rows):
     buttons = [KeyboardButton(i) for i in data]
-    keyboard = ReplyKeyboardMarkup()
+    keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
     bn_n = 0
     for count_row in lengths_rows:
         keyboard.row(*buttons[bn_n: bn_n + count_row])
@@ -223,7 +225,8 @@ def create_subs_groups_keyboard(groups_id):
     markup = [2] * (len(res) // 2)
     if len(res) % 2 == 1:
         markup.append(1)
-    return create_inline_keyboard_markup(res, markup)
+    r = create_inline_keyboard_markup(res, markup)
+    return r
 
 
 def create_search_posts_keyboard(group_id, arr_pos=1):
@@ -237,66 +240,59 @@ def create_search_posts_keyboard(group_id, arr_pos=1):
         buttons.append([f'{text[i]} кол-во постов', f'csp_{group_id}_{arr_pos}_{i}'])
     return create_inline_keyboard_markup(buttons, [2, 2, 1, 1])
 
-# def create_video_url(video_owner_id, video_post_id, video_access_key):
-#     return f"https://api.vk.com/method/video.get?
-#     videos={video_owner_id}_{video_post_id}_{video_access_key}&access_token={vk_token}&v=5.131"
-# def check_link(link):
-#     group_name = link.split('/')[link.split('/').index('vk.com') + 1]
-#     try:
-#         return analysis_group(group_name)
-#     except:
-#         return False
-#
-#
 
-#
-# def check_num(n):
-#     if n == 4:
-#         return 0
-#     elif n == -1:
-#         return 3
-#     return n
+# other functions
+
+def create_video_url(video_owner_id, video_post_id, video_access_key):
+    return f"https://api.vk.com/method/video.get?" \
+           f"videos={video_owner_id}_{video_post_id}_{video_access_key}&access_token={config.vk_token}&v=5.131"
+
+
+def get_correct_delta_post_pos(n):
+    if n == len(config.list_delta_posts):
+        return 0
+    elif n == -1:
+        return len(config.list_delta_posts) - 1
+    return n
 
 
 # main functions
 
-# def return_media_message(post, group_id):
-#     media = types.MediaGroup()
-#     res = [media, [], []]
-#     # print(res[1])
-#     if 'attachments' in post:
-#         for element in post['attachments']:
-#             if element['type'] == 'photo':
-#                 photos = sorted(element['photo']['sizes'], key=lambda d: d['height'])
-#                 media.attach_photo(
-#                     types.InputFile(download_img(photos[-1]['url'], group_id, element['photo']['id'])))
-#             elif element['type'] == 'video':
-#                 video_access_key = element["video"]["access_key"]
-#                 video_post_id = element["video"]["id"]
-#                 video_owner_id = element["video"]["owner_id"]
-#                 video_get_url = create_video_url(video_owner_id, video_post_id, video_access_key)
-#                 video_url = requests.get(video_get_url).json()["response"]["items"][0]["player"]
-#                 video_file = download_video(video_url, group_id, video_post_id)
-#                 if video_file:
-#                     media.attach_video(open(video_file, 'rb'))
-#                 else:
-#                     res[2].append(text['txt_9'])
-#             else:
-#                 res[2].append(text['txt_8'])
-#     if 'text' in post and post['text']:
-#         res[1].append(post['text'])
-#     if 'copy_history' in post:
-#         res[2].append('-' * 5 + '\n' + 'Ответ к другому посту' + '\n' + '-' * 5)
-#     return res
-#
-#
+def return_media_message(post, group_id):
+    media = MediaGroup()
+    res = [media, [], []]
+    if 'attachments' in post:
+        for element in post['attachments']:
+            if element['type'] == 'photo':
+                photos = sorted(element['photo']['sizes'], key=lambda d: d['height'])
+                media.attach_photo(
+                    InputFile(download_img(photos[-1]['url'], group_id, element['photo']['id'])))
+            elif element['type'] == 'video':
+                video_access_key = element["video"]["access_key"]
+                video_post_id = element["video"]["id"]
+                video_owner_id = element["video"]["owner_id"]
+                video_get_url = create_video_url(video_owner_id, video_post_id, video_access_key)
+                video_url = requests.get(video_get_url).json()["response"]["items"][0]["player"]
+                video_file = download_video(video_url, group_id, video_post_id)
+                if video_file:
+                    media.attach_video(open(video_file, 'rb'))
+                else:
+                    res[2].append(config.standard_answers['txt_9'])
+            else:
+                res[2].append(config.standard_answers['txt_8'])
+    if 'text' in post and post['text']:
+        res[1].append(post['text'])
+    if 'copy_history' in post:
+        res[2].append('-' * 5 + '\n' + 'Ответ к другому посту' + '\n' + '-' * 5)
+    return res
+
 # def return_new_posts(group_id, last_post_id):
-#     posts = analysis_posts(group_id, 1)
+#     posts = vk_parse_get_posts(group_id, 1)
 #     print(posts[0]['id'])
 #     if posts[0]['id'] != last_post_id:
-#         posts= analysis_posts(group_id, 15)
+#         posts = vk_parse_get_posts(group_id, 15)
 #         for i in range(15):
-#             if posts[i]['id']==last_post_id:
+#             if posts[i]['id'] == last_post_id:
 #                 print(i)
 #                 return posts[:i]
 #     return []
