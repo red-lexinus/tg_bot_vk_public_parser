@@ -1,4 +1,6 @@
 import datetime
+import threading
+import time
 
 from aiogram import Bot, types
 from aiogram.dispatcher import Dispatcher
@@ -8,16 +10,17 @@ from aiogram.types import ReplyKeyboardRemove, \
     InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 import asyncio
 
-
 import config
+from config import *
 from scripts import *
 
-# loop = asyncio.get_running_loop()
+loop = asyncio.get_event_loop()
 bot = Bot(token=config.TOKEN)
-dp = Dispatcher(bot)
+dp = Dispatcher(bot, loop=loop)
 
-conn = sqlite3.connect('data.db')
+conn = sqlite3.connect('data.db', check_same_thread=False)
 cur = conn.cursor()
+cur_2 = conn.cursor()
 
 main_keyboard = create_reply_keyboard_markup([config.standard_answers['mbt_1'],
                                               config.standard_answers['mbt_2']], [1, 1])
@@ -120,22 +123,45 @@ async def process_callback_sp(callback_query: CallbackQuery):
             await bot.send_message(callback_query.from_user.id, i)
 
 
-# async def auto_messages():
-#     delta_time = 0
-#     while True:
-#         if delta_time == 6:
-#             clean_files()
-#             delta_time = 0
-#         groups_users = groups_users_update(cur)
-#         print(groups_users)
-#         for group_id in groups_users.keys():
-#             last_post_id = get_last_post(cur, group_id)
-#             print(return_new_posts(group_id, last_post_id))
-#         await asyncio.sleep(24 * 60 * 60)
-# delta_time += 1
+def flow_check_new_posts(dp, bot, conn, cur, downtime):
+    while auto_parsing_flag:
+        for i in range(time_clean_files):
+            groups_users = database_get_groups_updated(cur)
+            for group_id in groups_users.keys():
+                group_name = vk_parse_get_group_info(group_id)[1]
+                last_post_id = database_get_last_post(cur, group_id)
+                new_posts = return_new_posts(group_id, last_post_id)
+                for post_num in range(len(new_posts)):
+                    post = return_media_message(new_posts[post_num], group_id)
+                    print(new_posts[post_num])
+                    for user_id in groups_users[group_id]:
+                        post_time = str(datetime.datetime.fromtimestamp(int(new_posts[post_num]['date'])))
+                        dp.loop.create_task(send_new_post(bot, user_id, post, group_name, post_time))
+                database_change_last_post(conn, cur, group_id, new_posts[0]['id'])
+            time.sleep(downtime)
+        clean_files()
+
+
+
+
+
+
+async def send_new_post(bot, chat_id, post, group_name, post_time):
+    await bot.send_message(chat_id, f'В паблике {group_name} вышел пост\n{post_time}')
+    # for i in post[1]:
+    #     await bot.send_message(chat_id, i)
+    try:
+        new_media = MediaGroup()
+        for elem in post[0].media:
+            new_media.attach(elem)
+        await bot.send_media_group(chat_id, new_media, post[1][0])
+    except:
+        pass
+    # for i in post[2]:
+    #     await bot.send_message(chat_id, i)
 
 
 if __name__ == '__main__':
-    clean_files()
-    # dp.loop.create_task(auto_messages())
+    # clean_files()
+    # threading.Thread(target=flow_check_new_posts, args=(dp, bot, conn, cur_2, time_auto_message)).start()
     executor.start_polling(dp)

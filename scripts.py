@@ -14,6 +14,7 @@ import config
 
 # scripts working with the database
 
+
 def database_create():
     conn = sqlite3.connect('data.db')
     cur = conn.cursor()
@@ -256,6 +257,10 @@ def get_correct_delta_post_pos(n):
     return n
 
 
+def fun():
+    pass
+
+
 # main functions
 
 def return_media_message(post, group_id):
@@ -286,13 +291,13 @@ def return_media_message(post, group_id):
         res[2].append('-' * 5 + '\n' + 'Ответ к другому посту' + '\n' + '-' * 5)
     return res
 
-# def return_new_posts(group_id, last_post_id):
-#     posts = vk_parse_get_posts(group_id, 1)
-#     print(posts[0]['id'])
-#     if posts[0]['id'] != last_post_id:
-#         posts = vk_parse_get_posts(group_id, 15)
-#         for i in range(15):
-#             if posts[i]['id'] == last_post_id:
-#                 print(i)
-#                 return posts[:i]
-#     return []
+
+def return_new_posts(group_id, last_post_id, count_posts_check=15):
+    posts = vk_parse_get_posts(group_id, count_posts_check)
+    new_post_count = 0
+    for i in range(len(posts)):
+        if posts[i]['id'] == last_post_id:
+            return posts[0:new_post_count]
+        new_post_count += 1
+    return posts[0:new_post_count]
+

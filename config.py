@@ -33,3 +33,11 @@ standard_answers = {
     'link_3': '',
     'link_': 'https://boosty.to/ikakprosto'
 }
+
+time_clean_files = 6
+
+time_auto_message = 30 * 60
+
+auto_parsing_flag = True
+
+mailing_flag = False
